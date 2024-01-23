@@ -1,0 +1,98 @@
+SX = nil
+
+TriggerEvent('esx:getSharedObject', function(obj) ESX = obj end)
+
+RegisterServerEvent('esx:bank:deposit')
+AddEventHandler('esx:bank:deposit', function(amount)
+	local _source = source
+	local steamid = ""
+	for _, idents in pairs(GetPlayerIdentifiers(source)) do
+		if string.sub(idents, 1, string.len("steam:")) == "steam:" then
+			steamid = idents
+		end
+	end
+	local xPlayer = ESX.GetPlayerFromId(_source)
+	if amount == nil or amount <= 0 or amount > xPlayer.getMoney() then
+		TriggerClientEvent('esx:bank:notify', _source, "error", "Invalid Amount")
+	else
+		xPlayer.removeMoney(amount)
+		xPlayer.addAccountMoney('bank', tonumber(amount))
+		TriggerEvent("menacerp:discordlog", "Bank Withdraw", "**Name: **"..GetPlayerName(xPlayer.source).." (ID: "..tonumber(source)..") ("..steamid..")\n**Amount: **$"..amount, "https://discord.com/api/webhooks/813207359329009664/MtfcVQR0O_IvY4FsRqsRkxwF4VtLNkthUVuBWnNNGaJUB7CWyYb8bcD1Wk9n7VLNsDll", 'Banking')
+		TriggerClientEvent('esx:bank:notify', _source, "success", "You successfully deposited $" .. amount)
+	end
+end)
+
+RegisterServerEvent('esx:bank:withdraw')
+AddEventHandler('esx:bank:withdraw', function(amount)
+	local _source = source
+	local steamid = ""
+	for _, idents in pairs(GetPlayerIdentifiers(source)) do
+		if string.sub(idents, 1, string.len("steam:")) == "steam:" then
+			steamid = idents
+		end
+	end
+	local xPlayer = ESX.GetPlayerFromId(_source)
+	local min = 0
+	amount = tonumber(amount)
+	min = xPlayer.getAccount('bank').money
+	if amount == nil or amount <= 0 or amount > min then
+		TriggerClientEvent('esx:bank:notify', _source, "error", "Invalid Amount")
+	else
+		xPlayer.removeAccountMoney('bank', amount)
+		xPlayer.addMoney(amount)
+		TriggerEvent("menacerp:discordlog", "Bank Deposit", "**Name: **"..GetPlayerName(xPlayer.source).." (ID: "..tonumber(source)..") ("..steamid..")\n**Amount: **$"..amount, "https://discord.com/api/webhooks/813207359329009664/MtfcVQR0O_IvY4FsRqsRkxwF4VtLNkthUVuBWnNNGaJUB7CWyYb8bcD1Wk9n7VLNsDll", 'Banking')
+		TriggerClientEvent('esx:bank:notify', _source, "success", "You successfully withdrew $" .. amount)
+	end
+end)
+
+RegisterServerEvent('esx:bank:balance')
+AddEventHandler('esx:bank:balance', function()
+	
+	local _source = source
+	local xPlayer = ESX.GetPlayerFromId(_source)
+	balance = xPlayer.getAccount('bank').money
+	TriggerClientEvent('esx:bank:info', _source, balance)
+end)
+
+RegisterServerEvent('esx:bank:transfer')
+AddEventHandler('esx:bank:transfer', function(to, amountt)
+	local _source = source
+	local xPlayer = ESX.GetPlayerFromId(_source)
+	local xTarget = ESX.GetPlayerFromId(to)
+	local amount = amountt
+	local balance = 0
+	local steamidsrc = ""
+	local steamidtgt = ""
+
+	for _, idents in pairs(GetPlayerIdentifiers(source)) do
+        if string.sub(idents, 1, string.len("steam:")) == "steam:" then
+            steamidsrc = idents
+        end
+	end
+
+    for k, v in pairs(GetPlayerIdentifiers(to)) do
+        if string.sub(v, 1, string.len("steam:")) == "steam:" then
+            steamidtgt = v
+        end
+	end
+	if(xTarget == nil or xTarget == -1) then
+		TriggerClientEvent('esx:bank:notify', _source, "error", "Recipient not found")
+	else
+		balance = xPlayer.getAccount('bank').money
+		zbalance = xTarget.getAccount('bank').money
+		
+		if tonumber(_source) == tonumber(to) then
+			TriggerClientEvent('esx:bank:notify', _source, "error", "You cannot transfer money to yourself")
+		else
+			if balance <= 0 or balance < tonumber(amount) or tonumber(amount) <= 0 then
+				TriggerClientEvent('esx:bank:notify', _source, "error", "You don't have enough money for this transfer")
+			else
+				xPlayer.removeAccountMoney('bank', tonumber(amount))
+				xTarget.addAccountMoney('bank', tonumber(amount))
+				TriggerEvent("menacerp:discordlog", "Bank Transfer", "**Sender: **"..GetPlayerName(xPlayer.source).." (ID: "..tonumber(source)..") ("..steamidsrc..")\n**Recipient: **"..GetPlayerName(zPlayer.source).." (ID: "..tonumber(to)..") ("..steamidtgt..")\n**Amount: **$"..amountt, "https://discord.com/api/webhooks/813207359329009664/MtfcVQR0O_IvY4FsRqsRkxwF4VtLNkthUVuBWnNNGaJUB7CWyYb8bcD1Wk9n7VLNsDll", 'Banking')
+				TriggerClientEvent('esx:bank:notify', _source, "success", "You successfully transfered $" .. amount)
+				TriggerClientEvent('esx:bank:notify', to, "success", "You have just received $" .. amount .. ' via transfer')
+			end
+		end
+	end
+end)
