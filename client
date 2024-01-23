@@ -1,0 +1,201 @@
+ESX = nil
+
+local showBankBlips = true
+local atBank = false
+local bankMenu = true
+local inMenu = false
+local atATM = false
+local bankColor = "green"
+ 
+local bankLocations = {
+    {i = 108, c = 77, x = 2332.2002, y = 5869.2485, z = 8.3146, s = 0.8, n = "Miami Standerd Bank"},
+	{i = 108, c = 2, x = 3566.0581, y = 5324.7510, z = 6.0309, s = 0.7, n = "Fleeca Bank"},
+	{i = 108, c = 2, x = 3635.9482, y = 7517.2495, z = 14.8991, s = 0.7, n = "Fleeca Bank"}
+}
+
+local ATMs = {
+    {o = -870868698, c = 'blue'}, 
+    {o = -1126237515, c = 'blue'}, 
+    {o = -1364697528, c = 'red'}, 
+    {o = 506770882, c = 'green'}
+}
+
+Citizen.CreateThread(function()
+    while ESX == nil do
+        Citizen.Wait(0)
+        TriggerEvent("esx:getSharedObject", function(obj) 
+            ESX = obj 
+        end)
+    end
+    while true do
+        local wait = 1000
+        local ped = PlayerPedId()
+        local pos = GetEntityCoords(ped)
+        for k, v in pairs(bankLocations) do
+            local formatted = vector3(v.x, v.y, v.z)
+            local dist = #(formatted - pos)
+            if dist < 5.0 then
+                wait = 0
+                DrawMarker(29, v.x, v.y, v.z - 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.3, 1.3, 1.0, 44, 212, 32, 255, false, false, 1, true, nil, nil, false)
+                if dist < 1.0 then
+                    bankColor = "green"
+                    if not inMenu then
+                        local pressed = IsControlJustPressed(0, 38)
+                        ESX.ShowHelpNotification("Press ~INPUT_CONTEXT~ to access the bank")
+                        if pressed then
+                            openPlayersBank('bank')
+                        end
+                    end
+                    if inMenu then
+                        if IsControlJustPressed(0, 322) then
+                            inMenu = false
+                            SetNuiFocus(false, false)
+                            SendNUIMessage({type = 'close'})
+                        end
+                    end
+                end
+            end
+        end
+        Citizen.Wait(wait)
+    end
+end)
+
+local notNear = false
+RegisterCommand('atm', function()
+    local ped = PlayerPedId()
+    local pos = GetEntityCoords(ped)
+    for i = 1, #ATMs do
+        local atm = GetClosestObjectOfType(pos.x, pos.y, pos.z, 1.0, ATMs[i].o, false, false, false)
+        local atmPos = GetEntityCoords(atm)
+        local dist = GetDistanceBetweenCoords(pos.x, pos.y, pos.z, atmPos.x, atmPos.y, atmPos.z, true)
+        if dist < 1.5 then
+            bankColor = ATMs[i].c
+            openPlayersBank('atm')
+        else
+            notNear = true
+        end
+    end
+    if notNear then
+        exports['mythic_notify']:SendAlert('error', 'You are not near an ATM')
+    end
+end)
+
+function AnimationShit(dict)
+    RequestAnimDict(dict)
+    while not HasAnimDictLoaded(dict) do
+        Citizen.Wait(100)
+    end
+end
+
+function openPlayersBank(type, color)
+    local dict = 'anim@amb@prop_human_atm@interior@male@enter'
+    local anim = 'enter'
+    local ped = GetPlayerPed(-1)
+    local time = 2500
+    AnimationShit(dict)
+    TaskPlayAnim(ped, dict, anim, 8.0, 8.0, -1, 0, 0, 0, 0, 0)
+    TriggerEvent('hud:taskBar', time, "Inserting card...")
+	Citizen.Wait(time)	
+    ClearPedTasks(ped)
+    if type == 'bank' then
+        inMenu = true
+        SetNuiFocus(true, true)
+        bankColor = "green"
+        SendNUIMessage({type = 'openBank', color = bankColor})
+        TriggerServerEvent('esx:bank:balance')
+        atATM = false
+    elseif type == 'atm' then
+        inMenu = true
+        SetNuiFocus(true, true)
+        SendNUIMessage({type = 'openBank', color = bankColor})
+        TriggerServerEvent('esx:bank:balance')
+        atATM = true
+    end
+end
+
+local blipsLoaded = false
+
+Citizen.CreateThread(function() 
+    if not blipsLoaded then 
+        for k, v in ipairs(bankLocations) do
+            local blip = AddBlipForCoord(v.x, v.y, v.z)
+            SetBlipSprite(blip, v.i)
+            SetBlipScale(blip, v.s)
+            SetBlipAsShortRange(blip, true)
+            SetBlipColour(blip, v.c)
+            BeginTextCommandSetBlipName("STRING")
+            AddTextComponentString(tostring(v.n))
+            EndTextCommandSetBlipName(blip) 
+        end
+        blipsLoaded = true
+    end
+end)
+
+RegisterNetEvent('esx:bank:info')
+AddEventHandler('esx:bank:info', function(balance)
+    local id = PlayerId()
+    local playerName = GetPlayerName(id)
+    SendNUIMessage({
+		type = "updateBalance",
+		balance = balance,
+        player = playerName,
+	})
+end)
+
+RegisterNUICallback('deposit', function(data)
+    if not atATM then
+        TriggerServerEvent('esx:bank:deposit', tonumber(data.amount))
+        TriggerServerEvent('esx:bank:balance')
+    else
+        exports['mythic_notify']:SendAlert('error', 'You cannot deposit money at an ATM')
+    end
+end)
+
+RegisterNUICallback('withdrawl', function(data)
+    TriggerServerEvent('esx:bank:withdraw', tonumber(data.amountw))
+    TriggerServerEvent('esx:bank:balance')
+end)
+
+RegisterNUICallback('balance', function()
+    TriggerServerEvent('esx:bank:balance')
+end)
+
+RegisterNetEvent('esx:balance:back')
+AddEventHandler('esx:balance:back', function(balance)
+    SendNUIMessage({type = 'balanceReturn', bal = balance})
+end)
+
+function closePlayersBank()
+    local dict = 'anim@amb@prop_human_atm@interior@male@exit'
+    local anim = 'exit'
+    local ped = GetPlayerPed(-1)
+    local time = 1800
+    AnimationShit(dict)
+    SetNuiFocus(false, false)
+    SendNUIMessage({type = 'closeAll'})
+    TaskPlayAnim(ped, dict, anim, 8.0, 8.0, -1, 0, 0, 0, 0, 0)
+    TriggerEvent('hud:taskBar', time, "Retrieving card...")
+    Citizen.Wait(time)
+    ClearPedTasks(ped)
+    inMenu = false
+end
+
+RegisterNUICallback('transfer', function(data)
+    TriggerServerEvent('esx:bank:transfer', data.to, data.amountt)
+    TriggerServerEvent('esx:bank:balance')
+end)
+
+RegisterNetEvent('esx:bank:notify')
+AddEventHandler('esx:bank:notify', function(type, message)
+    exports['mythic_notify']:SendAlert(type, message)
+end)
+
+AddEventHandler('onResourceStop', function(resource)
+    inMenu = false
+    SetNuiFocus(false, false)
+    SendNUIMessage({type = 'closeAll'})
+end)
+
+RegisterNUICallback('NUIFocusOff', function()
+    closePlayersBank()
+end)
